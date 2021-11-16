@@ -378,8 +378,10 @@ module.exports.AScene = registerElement('a-scene', {
             requestFullscreen(self.canvas);
           }
 
-          self.renderer.setAnimationLoop(self.render);
-          self.resize();
+          if (self.hasLoaded) {
+            self.startRendering();
+          }
+
           if (resolve) { resolve(); }
         }
 
@@ -667,6 +669,33 @@ module.exports.AScene = registerElement('a-scene', {
       writable: window.debug
     },
 
+    startRendering: {
+      value: function () {
+        var renderer = this.renderer;
+        var vrDisplay;
+        var vrManager = this.renderer.xr;
+        var sceneEl = this;
+
+        if (sceneEl.renderStarted) { return; }
+        sceneEl.resize();
+
+        // Kick off render loop.
+        if (sceneEl.renderer) {
+          if (window.performance) { window.performance.mark('render-started'); }
+          loadingScreen.remove();
+          vrDisplay = utils.device.getVRDisplay();
+          if (vrDisplay && vrDisplay.isPresenting) {
+            vrManager.setDevice(vrDisplay);
+            vrManager.enabled = true;
+            sceneEl.enterVR();
+          }
+          renderer.setAnimationLoop(this.render);
+          sceneEl.renderStarted = true;
+          sceneEl.emit('renderstart');
+        }
+      }
+    },
+
     /**
      * Handler attached to elements to help scene know when to kick off.
      * Scene waits for all entities to load.
@@ -674,7 +703,6 @@ module.exports.AScene = registerElement('a-scene', {
     play: {
       value: function () {
         var self = this;
-        var sceneEl = this;
 
         if (this.renderStarted) {
           AEntity.prototype.play.call(this);
@@ -682,28 +710,8 @@ module.exports.AScene = registerElement('a-scene', {
         }
 
         this.addEventListener('loaded', function () {
-          var renderer = this.renderer;
-          var vrDisplay;
-          var vrManager = this.renderer.xr;
           AEntity.prototype.play.call(this);  // .play() *before* render.
-
-          if (sceneEl.renderStarted) { return; }
-          sceneEl.resize();
-
-          // Kick off render loop.
-          if (sceneEl.renderer) {
-            if (window.performance) { window.performance.mark('render-started'); }
-            loadingScreen.remove();
-            vrDisplay = utils.device.getVRDisplay();
-            if (vrDisplay && vrDisplay.isPresenting) {
-              vrManager.setDevice(vrDisplay);
-              vrManager.enabled = true;
-              sceneEl.enterVR();
-            }
-            renderer.setAnimationLoop(this.render);
-            sceneEl.renderStarted = true;
-            sceneEl.emit('renderstart');
-          }
+          self.startRendering();
         });
 
         // setTimeout to wait for all nodes to attach and run their callbacks.
